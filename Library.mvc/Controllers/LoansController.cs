@@ -26,7 +26,8 @@ namespace Library.MVC.Controllers
         {
             var applicationDbContext = _context.Loans
                 .Include(l => l.Book)
-                .Include(l => l.Member);
+                .Include(l => l.Member)
+                .OrderByDescending(l => l.LoanDate);
 
             return View(await applicationDbContext.ToListAsync());
         }
@@ -35,7 +36,9 @@ namespace Library.MVC.Controllers
         public async Task<IActionResult> Details(int? id)
         {
             if (id == null)
+            {
                 return NotFound();
+            }
 
             var loan = await _context.Loans
                 .Include(l => l.Book)
@@ -43,7 +46,9 @@ namespace Library.MVC.Controllers
                 .FirstOrDefaultAsync(m => m.Id == id);
 
             if (loan == null)
+            {
                 return NotFound();
+            }
 
             return View(loan);
         }
@@ -53,10 +58,11 @@ namespace Library.MVC.Controllers
         {
             var availableBooks = _context.Books
                 .Where(b => !_context.Loans.Any(l => l.BookId == b.Id && l.ReturnedDate == null))
+                .OrderBy(b => b.Title)
                 .ToList();
 
             ViewData["BookId"] = new SelectList(availableBooks, "Id", "Title");
-            ViewData["MemberId"] = new SelectList(_context.Members, "Id", "FullName");
+            ViewData["MemberId"] = new SelectList(_context.Members.OrderBy(m => m.FullName), "Id", "FullName");
 
             return View();
         }
@@ -66,8 +72,8 @@ namespace Library.MVC.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("BookId,MemberId,DueDate")] Loan loan)
         {
-            var isLoaned = _context.Loans
-                .Any(l => l.BookId == loan.BookId && l.ReturnedDate == null);
+            var isLoaned = await _context.Loans
+                .AnyAsync(l => l.BookId == loan.BookId && l.ReturnedDate == null);
 
             if (isLoaned)
             {
@@ -87,16 +93,16 @@ namespace Library.MVC.Controllers
 
                 _context.Loans.Add(loan);
                 await _context.SaveChangesAsync();
-
                 return RedirectToAction(nameof(Index));
             }
 
             var availableBooks = _context.Books
                 .Where(b => !_context.Loans.Any(l => l.BookId == b.Id && l.ReturnedDate == null) || b.Id == loan.BookId)
+                .OrderBy(b => b.Title)
                 .ToList();
 
             ViewData["BookId"] = new SelectList(availableBooks, "Id", "Title", loan.BookId);
-            ViewData["MemberId"] = new SelectList(_context.Members, "Id", "FullName", loan.MemberId);
+            ViewData["MemberId"] = new SelectList(_context.Members.OrderBy(m => m.FullName), "Id", "FullName", loan.MemberId);
 
             return View(loan);
         }
@@ -105,14 +111,18 @@ namespace Library.MVC.Controllers
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
+            {
                 return NotFound();
+            }
 
             var loan = await _context.Loans.FindAsync(id);
             if (loan == null)
+            {
                 return NotFound();
+            }
 
-            ViewData["BookId"] = new SelectList(_context.Books, "Id", "Title", loan.BookId);
-            ViewData["MemberId"] = new SelectList(_context.Members, "Id", "FullName", loan.MemberId);
+            ViewData["BookId"] = new SelectList(_context.Books.OrderBy(b => b.Title), "Id", "Title", loan.BookId);
+            ViewData["MemberId"] = new SelectList(_context.Members.OrderBy(m => m.FullName), "Id", "FullName", loan.MemberId);
 
             return View(loan);
         }
@@ -123,9 +133,11 @@ namespace Library.MVC.Controllers
         public async Task<IActionResult> Edit(int id, [Bind("Id,BookId,MemberId,LoanDate,DueDate,ReturnedDate")] Loan loan)
         {
             if (id != loan.Id)
+            {
                 return NotFound();
+            }
 
-            var activeLoanForSameBook = _context.Loans.Any(l =>
+            var activeLoanForSameBook = await _context.Loans.AnyAsync(l =>
                 l.BookId == loan.BookId &&
                 l.ReturnedDate == null &&
                 l.Id != loan.Id);
@@ -141,7 +153,6 @@ namespace Library.MVC.Controllers
                 {
                     _context.Update(loan);
 
-                    // 🔥 Atualiza disponibilidade automaticamente
                     var book = await _context.Books.FindAsync(loan.BookId);
                     if (book != null)
                     {
@@ -153,16 +164,20 @@ namespace Library.MVC.Controllers
                 catch (DbUpdateConcurrencyException)
                 {
                     if (!LoanExists(loan.Id))
+                    {
                         return NotFound();
+                    }
                     else
+                    {
                         throw;
+                    }
                 }
 
                 return RedirectToAction(nameof(Index));
             }
 
-            ViewData["BookId"] = new SelectList(_context.Books, "Id", "Title", loan.BookId);
-            ViewData["MemberId"] = new SelectList(_context.Members, "Id", "FullName", loan.MemberId);
+            ViewData["BookId"] = new SelectList(_context.Books.OrderBy(b => b.Title), "Id", "Title", loan.BookId);
+            ViewData["MemberId"] = new SelectList(_context.Members.OrderBy(m => m.FullName), "Id", "FullName", loan.MemberId);
 
             return View(loan);
         }
@@ -171,7 +186,9 @@ namespace Library.MVC.Controllers
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
+            {
                 return NotFound();
+            }
 
             var loan = await _context.Loans
                 .Include(l => l.Book)
@@ -179,7 +196,9 @@ namespace Library.MVC.Controllers
                 .FirstOrDefaultAsync(m => m.Id == id);
 
             if (loan == null)
+            {
                 return NotFound();
+            }
 
             return View(loan);
         }
@@ -193,7 +212,6 @@ namespace Library.MVC.Controllers
 
             if (loan != null)
             {
-                // 🔥 devolve o livro ao deletar loan
                 var book = await _context.Books.FindAsync(loan.BookId);
                 if (book != null)
                 {
@@ -207,13 +225,17 @@ namespace Library.MVC.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // GET: Loans/Return/5
+        // POST: Loans/Return/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Return(int id)
         {
             var loan = await _context.Loans.FindAsync(id);
 
             if (loan == null)
+            {
                 return NotFound();
+            }
 
             if (loan.ReturnedDate == null)
             {
