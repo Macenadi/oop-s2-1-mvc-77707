@@ -1,3 +1,5 @@
+![CI](https://github.com/Macenadi/Library.domain-New-Assigment/actions/workflows/ci.yml/badge.svg)
+
 # 📚 Library Management System
 
 ASP.NET Core MVC application for managing a community library.
